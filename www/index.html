@@ -14,37 +14,22 @@
 
 	<!-- CSS -->
 	<link rel="stylesheet" href="style.css">
+
+	<!-- JS -->
+	<script src="index.js"></script>
 </head>
 
 <body>
 	<div id="form-box" class="box">
-		<form id="form" action="/shorten" method="post">
+		<form id="form">
 			<input id="url" type="text" name="url" oninput="resizeToText(value)" placeholder="http://www.goldsborough.me/">
 		</form>
 	</div>
 	<div id="go-box" class="box">
-		<input form="form" id="go" type="submit" value="Go">
+		<button id="go" onclick="shorten(url.value)">Go</button>
 	</div>
 </body>
 <script type="text/javascript">
-	function css(element, property) {
-		return window.getComputedStyle(element, null).getPropertyValue(property);
-	}
-
-	function resizeToText(text) {
-		const form = document.querySelector('#form');
-		const fontFamily = css(form, 'font-family');
-		const fontSize = css(form, 'font-size');
-
-		const canvas = document.createElement('canvas');
-		const context = canvas.getContext("2d");
-		context.font = `${fontSize} ${fontFamily}`;
-		const width = context.measureText(text).width;
-		form.style.width = `${width}px`
-
-		return width;
-	}
-
 	const initialWidth = resizeToText(document.querySelector('#url').placeholder);
 	const form = document.querySelector('#form-box');
 	form.style['min-width'] = `${initialWidth}px`;
