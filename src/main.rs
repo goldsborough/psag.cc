@@ -65,6 +65,17 @@ const ALL_PAGES: &[&'static str] = &[
     NOT_FOUND_PAGE,
 ];
 
+fn read_resource_from_disk(path: &str) -> String {
+    let mut resource = String::new();
+    info!("Reading resource {} into memory", path);
+    let mut file = File::open(&path[..]).expect(&format!("Error opening file {}", path));
+    file.read_to_string(&mut resource).expect(&format!(
+        "Error reading {} from disk",
+        path
+    ));
+    resource
+}
+
 struct PageManager {
     pages: Handlebars,
 }
@@ -73,7 +84,7 @@ impl PageManager {
     fn new(page_names: &[&'static str]) -> PageManager {
         let mut pages = Handlebars::new();
         for page_name in page_names {
-            let page = PageManager::read_page_from_disk(&page_name);
+            let page = read_resource_from_disk(&format!("www/{}", page_name));
             pages.register_template_string(page_name, page).unwrap();
         }
         PageManager { pages }
@@ -85,18 +96,6 @@ impl PageManager {
 
     fn render<T: Serialize>(&self, name: &str, values: T) -> String {
         self.pages.render(name, &values).unwrap()
-    }
-
-    fn read_page_from_disk(page_name: &'static str) -> String {
-        let mut page = String::new();
-        let path = format!("www/{}", page_name);
-        info!("Reading page {} into memory", path);
-        let mut file = File::open(&path[..]).expect(&format!("Error opening {}", path));
-        file.read_to_string(&mut page).expect(&format!(
-            "Error reading {} from disk",
-            path
-        ));
-        page
     }
 }
 
@@ -285,14 +284,15 @@ impl Service for UrlShortener {
     type Future = Box<Future<Item = Self::Response, Error = Self::Error>>;
     fn call(&self, request: Request) -> Self::Future {
         // This copy is partly to work around the borrow checker.
+        let method = request.method().clone();
         let path = String::from(request.path());
-        match (request.method(), &path[..]) {
-            (&Get, "/") => {
+        match (method, &path[..]) {
+            (Get, "/") => {
                 Box::new(futures::future::ok(
                     make_redirect_response("/", LONG_DOMAIN),
                 ))
             }
-            (&Get, "/shorten") => {
+            (Get, "/shorten") => {
                 let page = self.page_manager.get(INDEX_PAGE);
                 Box::new(futures::future::ok(
                     Response::new()
@@ -300,7 +300,7 @@ impl Service for UrlShortener {
                         .with_body(page),
                 ))
             }
-            (&Post, "/shorten") => {
+            (Post, "/shorten") => {
                 let db_pool = self.db_pool.clone();
                 let page_manager = self.page_manager.clone();
                 let future = self.thread_pool.spawn_fn(move || {
@@ -315,7 +315,7 @@ impl Service for UrlShortener {
                 });
                 Box::new(future)
             }
-            (&Get, _) if is_valid_short_url(&path) => {
+            (Get, _) if is_valid_short_url(&path) => {
                 let db_pool = self.db_pool.clone();
                 let page_manager = self.page_manager.clone();
                 let future = self.thread_pool.spawn_fn(move || {
@@ -325,7 +325,19 @@ impl Service for UrlShortener {
                 });
                 Box::new(future)
             }
-            _ => {
+            (Get, _) if path.starts_with("/www/") => {
+                // Serving static content should be done by NGINX or smth.
+                // ENABLE WITH FLAG
+                info!("Requesting resource {}", path);
+                let resource = read_resource_from_disk(&path[1..]);
+                Box::new(futures::future::ok(
+                    Response::new()
+                        .with_header(ContentLength(resource.len() as u64))
+                        .with_body(resource),
+                ))
+            }
+            (method, _) => {
+                info!("{} request for unknown resource {}", method, path);
                 let page = self.page_manager.get(NOT_FOUND_PAGE);
                 Box::new(futures::future::ok(
                     Response::new()
