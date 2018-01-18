@@ -4,11 +4,17 @@ version = "0.1.0"
 authors = ["goldsborough <peter@goldsborough.me>"]
 
 [dependencies]
-hyper = "0.11.13"
+chrono = "0.4.0"
+diesel = {version="1.1.0", features = ["postgres"]}
 futures = "0.1.17"
-url = "1.6.0"
 futures-cpupool = "0.1.8"
-pretty_env_logger = "0.1.1"
+hyper = "0.11.13"
 log = "0.4.1"
 postgres = "0.15.1"
-diesel = "1.1.0"
+pretty_env_logger = "0.1.1"
+r2d2 = "0.8.2"
+r2d2-diesel = "1.0.0"
+url = "1.6.0"
+rand = "0.4.2"
+handlebars = "0.29.1"
+serde = "1.0.27"

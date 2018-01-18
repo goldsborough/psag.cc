@@ -1,8 +1,14 @@
-extern crate futures;
+extern crate chrono;
 extern crate futures_cpupool;
+extern crate futures;
+extern crate handlebars;
 extern crate hyper;
-extern crate url;
 extern crate postgres;
+extern crate rand;
+extern crate r2d2_diesel;
+extern crate r2d2;
+extern crate serde;
+extern crate url;
 
 extern crate pretty_env_logger;
 #[macro_use]
@@ -15,9 +21,10 @@ use std::fs::File;
 use std::io;
 use std::io::prelude::*;
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use std::error::Error;
 use std::env;
+use std::ops::Deref;
 
 use futures::future::{Future, FutureResult};
 use futures::Stream;
@@ -30,9 +37,17 @@ use hyper::header::{ContentLength, Location};
 
 use diesel::prelude::*;
 use diesel::pg::PgConnection;
-use postgres::{Connection, TlsMode};
+use r2d2_diesel::ConnectionManager;
 
 use url::Url;
+use handlebars::Handlebars;
+use serde::ser::Serialize;
+
+pub mod schema;
+pub mod models;
+
+const DEFAULT_DB_URL: &'static str = "postgresql://goldsborough@localhost:5432";
+const NUMBER_OF_HASH_ATTEMPTS: usize = 100;
 
 const LONG_DOMAIN: &'static str = "http://www.goldsborough.me";
 const SHORT_DOMAIN: &'static str = "http://www.psag.cc";
@@ -51,34 +66,36 @@ const ALL_PAGES: &[&'static str] = &[
 ];
 
 struct PageManager {
-    pages: HashMap<&'static str, String>,
+    pages: Handlebars,
 }
 
 impl PageManager {
     fn new(page_names: &[&'static str]) -> PageManager {
-        let mut pages: HashMap<&'static str, String> = HashMap::with_capacity(2);
-        page_names.iter().for_each(|page| {
-            pages.insert(page, PageManager::read_page_from_disk(&page));
-        });
+        let mut pages = Handlebars::new();
+        for page_name in page_names {
+            let page = PageManager::read_page_from_disk(&page_name);
+            pages.register_template_string(page_name, page).unwrap();
+        }
         PageManager { pages }
     }
 
-    fn get(&self, name: &'static str) -> Option<String> {
-        self.pages.get(name).map(|page| page.clone())
+    fn get(&self, name: &'static str) -> String {
+        self.render(name, ())
     }
 
-    fn render(&self, name: &'static str, values: Vec<&str>) -> Option<String> {
-        let template = self.get(name)?;
-        // render ...
-        Some(template)
+    fn render<T: Serialize>(&self, name: &str, values: T) -> String {
+        self.pages.render(name, &values).unwrap()
     }
 
     fn read_page_from_disk(page_name: &'static str) -> String {
         let mut page = String::new();
         let path = format!("www/{}", page_name);
         info!("Reading page {} into memory", path);
-        let mut file = File::open(path).unwrap();
-        file.read_to_string(&mut page).unwrap();
+        let mut file = File::open(&path[..]).expect(&format!("Error opening {}", path));
+        file.read_to_string(&mut page).expect(&format!(
+            "Error reading {} from disk",
+            path
+        ));
         page
     }
 }
@@ -89,12 +106,11 @@ struct ShortenResult {
 }
 
 struct ExpandResult {
-    id_hash: String,
     short_url: String,
     long_url: String,
 }
 
-fn parse_form(form_chunk: Chunk) -> FutureResult<String, hyper::Error> {
+fn parse_url_from_form(form_chunk: Chunk) -> FutureResult<String, hyper::Error> {
     let form = url::form_urlencoded::parse(form_chunk.as_ref())
         .into_owned()
         .collect::<HashMap<String, String>>();
@@ -108,36 +124,79 @@ fn parse_form(form_chunk: Chunk) -> FutureResult<String, hyper::Error> {
     }
 }
 
-fn maybe_insert(url: String) -> (u64, bool) {
-    (1u64, true)
+fn shorten_url(
+    long_url: String,
+    db_connection: &PgConnection,
+) -> FutureResult<ShortenResult, hyper::Error> {
+    use schema::urls;
+
+    let existing_url: QueryResult<models::Url> = urls::table
+        .filter(urls::long_url.eq(long_url.clone()))
+        .get_result(db_connection);
+    let maybe_hash = match existing_url {
+        Ok(url) => Some(url.hash),
+        Err(diesel::result::Error::NotFound) => None,
+        Err(error) => {
+            return futures::future::err(hyper::Error::from(
+                io::Error::new(io::ErrorKind::Other, error.description()),
+            ));
+        }
+    };
+
+    let already_existed = maybe_hash.is_some();
+    let maybe_hash = maybe_hash.or_else(move || {
+        for attempt in 1..NUMBER_OF_HASH_ATTEMPTS + 1 {
+            let result = diesel::insert_into(urls::table)
+                .values(&models::NewUrl::new(&long_url))
+                .returning(urls::hash)
+                .get_result(db_connection);
+            match result {
+                Ok(hash) => return Some(hash),
+                Err(_) => {
+                    warn!("Attempt #{} to find hash for {} failed", attempt, long_url);
+                }
+            }
+
+        }
+        None
+    });
+
+    match maybe_hash {
+        Some(hash) => {
+            let short_url = format!("{}/{}", SHORT_DOMAIN, hash);
+            futures::future::ok(ShortenResult {
+                short_url,
+                already_existed,
+            })
+        }
+        None => {
+            futures::future::err(hyper::Error::from(io::Error::new(
+                io::ErrorKind::Other,
+                "Could not find hash for URL",
+            )))
+        }
+    }
 }
 
-fn make_id_hash(id: u64) -> String {
-    String::from("adf")
-}
+fn expand_url(
+    short_url: String,
+    db_connection: &PgConnection,
+) -> FutureResult<ExpandResult, hyper::Error> {
+    use schema::urls;
 
-fn get_long_url_from_db(id_hash: &String) -> Option<String> {
-    Some(String::from("a"))
-}
+    // Safe to unwrap here because we already validated the URL earlier.
+    let hash = String::from(Url::parse(&short_url[..]).unwrap().path());
+    let query_result = urls::table
+        .select(urls::long_url)
+        .filter(urls::hash.eq(hash))
+        .get_result(db_connection);
 
-fn shorten_url(long_url: String) -> Result<ShortenResult, hyper::Error> {
-    let (id, already_existed) = maybe_insert(long_url);
-    let id_hash = make_id_hash(id);
-    let short_url = format!("{}/{}", SHORT_DOMAIN, id_hash);
-    Ok(ShortenResult {
-        short_url,
-        already_existed,
-    })
-}
-
-fn expand_url(short_url: String, id_hash: String) -> FutureResult<ExpandResult, hyper::Error> {
-    match get_long_url_from_db(&id_hash) {
-        Some(long_url) => futures::future::ok(ExpandResult {
+    match query_result {
+        Ok(long_url) => futures::future::ok(ExpandResult {
             short_url: short_url,
-            id_hash: id_hash,
             long_url: long_url,
         }),
-        None => futures::future::err(hyper::Error::from(io::Error::new(
+        Err(_) => futures::future::err(hyper::Error::from(io::Error::new(
             io::ErrorKind::InvalidInput,
             "Missing form field 'url'",
         ))),
@@ -156,9 +215,8 @@ fn make_expand_response(
             ))
         }
         Err(error) => {
-            let page = page_manager
-                .render(EXPAND_ERROR_PAGE, vec![error.description()])
-                .unwrap();
+            // vec![error.description()]
+            let page = page_manager.render(EXPAND_ERROR_PAGE, ());
             let response = Response::new()
                 .with_header(ContentLength(page.len() as u64))
                 .with_body(page);
@@ -174,14 +232,12 @@ fn make_shorten_response(
     let page: String;
     match result {
         Ok(response) => {
-            page = page_manager
-                .render(SHORTEN_SUCCESS_PAGE, vec![&response.short_url[..]])
-                .unwrap();
+            // vec![&response.short_url[..]]
+            page = page_manager.render(SHORTEN_SUCCESS_PAGE, ());
         }
         Err(error) => {
-            page = page_manager
-                .render(SHORTEN_ERROR_PAGE, vec![error.description()])
-                .unwrap();
+            // vec![error.description()]
+            page = page_manager.render(SHORTEN_ERROR_PAGE, ());
         }
     }
     let response = Response::new()
@@ -195,12 +251,6 @@ fn make_redirect_response(source_url: &str, target_url: &str) -> hyper::Response
     Response::new()
         .with_status(StatusCode::PermanentRedirect)
         .with_header(Location::new(String::from(target_url)))
-
-}
-
-fn parse_id_hash(short_url: &String) -> FutureResult<String, hyper::Error> {
-    // We've already validated the url at this point.
-    futures::future::ok(String::from(Url::parse(short_url).unwrap().path()))
 }
 
 fn is_valid_short_url(short_url: &String) -> bool {
@@ -211,19 +261,20 @@ fn is_valid_short_url(short_url: &String) -> bool {
 
 struct UrlShortener {
     thread_pool: CpuPool,
-    page_manager: Arc<RwLock<PageManager>>,
+    page_manager: Arc<PageManager>,
+    db_pool: r2d2::Pool<ConnectionManager<PgConnection>>,
 }
 
 impl UrlShortener {
     fn new() -> UrlShortener {
+        let db_url = env::var("DATABASE_URL").unwrap_or(String::from(DEFAULT_DB_URL));
+        info!("Connecting to database @ {}", db_url);
+        let db_manager = ConnectionManager::<PgConnection>::new(db_url);
         UrlShortener {
             thread_pool: CpuPool::new(4),
-            page_manager: Arc::new(RwLock::new(PageManager::new(ALL_PAGES))),
+            page_manager: Arc::new(PageManager::new(ALL_PAGES)),
+            db_pool: r2d2::Pool::builder().build(db_manager).unwrap(),
         }
-    }
-
-    fn get_page(&self, name: &'static str) -> Option<String> {
-        self.page_manager.read().unwrap().get(name)
     }
 }
 
@@ -242,7 +293,7 @@ impl Service for UrlShortener {
                 ))
             }
             (&Get, "/shorten") => {
-                let page = self.get_page(INDEX_PAGE).unwrap();
+                let page = self.page_manager.get(INDEX_PAGE);
                 Box::new(futures::future::ok(
                     Response::new()
                         .with_header(ContentLength(page.len() as u64))
@@ -250,34 +301,32 @@ impl Service for UrlShortener {
                 ))
             }
             (&Post, "/shorten") => {
+                let db_pool = self.db_pool.clone();
                 let page_manager = self.page_manager.clone();
                 let future = self.thread_pool.spawn_fn(move || {
                     request
                         .body()
                         .concat2()
-                        .and_then(parse_form)
-                        .and_then(shorten_url)
-                        .then(move |result| {
-                            let page_manager = page_manager.read().unwrap();
-                            make_shorten_response(&page_manager, result)
+                        .and_then(parse_url_from_form)
+                        .and_then(move |long_url| {
+                            shorten_url(long_url, db_pool.get().unwrap().deref())
                         })
+                        .then(move |result| make_shorten_response(&page_manager, result))
                 });
                 Box::new(future)
             }
             (&Get, _) if is_valid_short_url(&path) => {
+                let db_pool = self.db_pool.clone();
                 let page_manager = self.page_manager.clone();
                 let future = self.thread_pool.spawn_fn(move || {
-                    parse_id_hash(&path)
-                        .and_then(|id_hash| expand_url(path, id_hash))
-                        .then(move |result| {
-                            let page_manager = page_manager.read().unwrap();
-                            make_expand_response(&page_manager, result)
-                        })
+                    expand_url(path, db_pool.get().unwrap().deref()).then(
+                        move |result| make_expand_response(&page_manager, result),
+                    )
                 });
                 Box::new(future)
             }
             _ => {
-                let page = self.get_page(NOT_FOUND_PAGE).unwrap();
+                let page = self.page_manager.get(NOT_FOUND_PAGE);
                 Box::new(futures::future::ok(
                     Response::new()
                         .with_status(StatusCode::NotFound)
@@ -289,29 +338,10 @@ impl Service for UrlShortener {
     }
 }
 
-pub mod schema;
-pub mod models;
-
-#[derive(Queryable)]
-struct Url {
-    id: i64,
-    long_url: String,
-    creation_time: String,
-    access_count: i32
-}
-
 fn main() {
+    pretty_env_logger::init().unwrap();
+    let addr = "127.0.0.1:3000".parse().unwrap();
+    let server = Http::new().bind(&addr, || Ok(UrlShortener::new())).unwrap();
+    info!("Starting UrlShortener service @ http://{}", addr);
+    server.run().unwrap();
 }
-
-// id integer primary key,
-// long_url varchar(256),
-// creation_time timestamp,
-// read_count integer,
-
-// fn main() {
-//     pretty_env_logger::init().unwrap();
-//     let addr = "127.0.0.1:3000".parse().unwrap();
-//     let server = Http::new().bind(&addr, || Ok(UrlShortener::new())).unwrap();
-//     info!("Starting UrlShortener service @ {}", addr);
-//     server.run().unwrap();
-// }

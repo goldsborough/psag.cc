@@ -1,0 +1,51 @@
+body {
+	align-items: center;
+	display: flex;
+	flex-direction: column;
+	font-family: monospace;
+	justify-content: center;
+	height: 90vh;
+}
+
+.box {
+	display: flex;
+	justify-content: center;
+	margin: 8px;
+  height: 32px;
+}
+
+#form-box {
+  align-items: flex-end;
+  min-width: 10%;
+}
+
+#form {
+  min-width: 100%;
+}
+
+#form input {
+  font: inherit;
+	border: none;
+	border-bottom: 1px dotted black;
+  outline: none;
+  width: 100%;
+}
+
+#go-box {
+  align-items: center;
+  width: 32px;
+}
+
+#go {
+	background: none;
+  border: none;
+  border: 1px solid black;
+  border-radius: 1px;
+  box-shadow: 3px 3px rgba(0, 0, 0, 0.5);
+	color: inherit;
+	cursor: pointer;
+	font: inherit;
+  height: 100%;
+	outline: inherit;
+  width: 100%;
+}
