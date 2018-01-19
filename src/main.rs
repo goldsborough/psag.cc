@@ -33,7 +33,7 @@ use futures_cpupool::CpuPool;
 use hyper::{Chunk, StatusCode};
 use hyper::server::{Http, Request, Response, Service};
 use hyper::Method::{Get, Post};
-use hyper::header::{ContentLength, Location};
+use hyper::header::{ContentLength, ContentType, Location};
 
 use diesel::prelude::*;
 use diesel::pg::PgConnection;
@@ -110,12 +110,13 @@ struct ExpandResult {
 }
 
 fn parse_url_from_form(form_chunk: Chunk) -> FutureResult<String, hyper::Error> {
-    let form = url::form_urlencoded::parse(form_chunk.as_ref())
+    let mut form = url::form_urlencoded::parse(form_chunk.as_ref())
         .into_owned()
         .collect::<HashMap<String, String>>();
-    if let Some(long_url) = form.get("url") {
+    info!("Received request with form data: {:?}", form);
+    if let Some(long_url) = form.remove("url") {
         info!("Found URL in form: {}", long_url);
-        futures::future::ok(long_url.clone())
+        futures::future::ok(long_url)
     } else {
         error!("Received POST request at /shorten but with no URL");
         futures::future::err(hyper::Error::from(io::Error::new(
@@ -131,6 +132,7 @@ fn shorten_url(
 ) -> FutureResult<ShortenResult, hyper::Error> {
     use schema::urls;
 
+    debug!("Querying DB to see if long URL already exists");
     let existing_url: QueryResult<models::Url> = urls::table
         .filter(urls::long_url.eq(long_url.clone()))
         .get_result(db_connection);
@@ -145,8 +147,10 @@ fn shorten_url(
     };
 
     let already_existed = maybe_hash.is_some();
-    let maybe_hash = maybe_hash.or_else(move || {
+    debug!("URL {} was already present: {}", long_url, already_existed);
+    let maybe_hash = maybe_hash.or_else(|| {
         for attempt in 1..NUMBER_OF_HASH_ATTEMPTS + 1 {
+            debug!("Inserting URL {} into DB", long_url);
             let result = diesel::insert_into(urls::table)
                 .values(&models::NewUrl::new(&long_url))
                 .returning(urls::hash)
@@ -165,6 +169,7 @@ fn shorten_url(
     match maybe_hash {
         Some(hash) => {
             let short_url = format!("{}/{}", SHORT_DOMAIN, hash);
+            info!("Short URL for {} is {}", long_url, short_url);
             futures::future::ok(ShortenResult {
                 short_url,
                 already_existed,
@@ -227,24 +232,32 @@ fn make_expand_response(
 }
 
 fn make_shorten_response(
-    page_manager: &PageManager,
-    result: Result<ShortenResult, hyper::Error>,
-) -> Result<hyper::Response, hyper::Error> {
-    let page: String;
-    match result {
-        Ok(response) => {
-            // vec![&response.short_url[..]]
-            page = page_manager.render(SHORTEN_SUCCESS_PAGE, ());
+    maybe_result: Result<ShortenResult, hyper::Error>,
+) -> FutureResult<hyper::Response, hyper::Error> {
+    let (status, payload) = match maybe_result {
+        Ok(result) => {
+            let payload = format!(
+                r#"{{
+                    "shortUrl": "{}",
+                    "alreadyExisted": {}
+                }}"#,
+                result.short_url,
+                result.already_existed
+            );
+            (StatusCode::Ok, payload)
         }
         Err(error) => {
-            // vec![error.description()]
-            page = page_manager.render(SHORTEN_ERROR_PAGE, ());
+            let payload = format!(r#"{{"error": "{}"}}"#, error.description());
+            (StatusCode::InternalServerError, payload)
         }
-    }
+    };
     let response = Response::new()
-        .with_header(ContentLength(page.len() as u64))
-        .with_body(page);
-    Ok(response)
+        .with_status(status)
+        .with_header(ContentLength(payload.len() as u64))
+        .with_header(ContentType::json())
+        .with_body(payload);
+    debug!("{:?}", response);
+    futures::future::ok(response)
 }
 
 fn make_redirect_response(source_url: &str, target_url: &str) -> hyper::Response {
@@ -269,7 +282,7 @@ struct UrlShortener {
 impl UrlShortener {
     fn new() -> UrlShortener {
         let db_url = env::var("DATABASE_URL").unwrap_or(String::from(DEFAULT_DB_URL));
-        info!("Connecting to database @ {}", db_url);
+        info!("Connecting to database {}", db_url);
         let db_manager = ConnectionManager::<PgConnection>::new(db_url);
         UrlShortener {
             thread_pool: CpuPool::new(4),
@@ -304,7 +317,6 @@ impl Service for UrlShortener {
             }
             (Post, "/shorten") => {
                 let db_pool = self.db_pool.clone();
-                let page_manager = self.page_manager.clone();
                 let future = self.thread_pool.spawn_fn(move || {
                     request
                         .body()
@@ -313,7 +325,7 @@ impl Service for UrlShortener {
                         .and_then(move |long_url| {
                             shorten_url(long_url, db_pool.get().unwrap().deref())
                         })
-                        .then(move |result| make_shorten_response(&page_manager, result))
+                        .then(make_shorten_response)
                 });
                 Box::new(future)
             }

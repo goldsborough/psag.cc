@@ -20,19 +20,25 @@
 </head>
 
 <body>
-	<div id="form-box" class="box">
+	<div id="url-box" class="box">
 		<form id="form">
-			<input id="url" type="text" name="url" oninput="resizeToText(value)" placeholder="http://www.goldsborough.me/">
+			<input id="url" type="text" name="url" oninput="onInputChange(value)" placeholder="http://www.goldsborough.me/">
 		</form>
+		<div id="short-url-box">
+			<a href="http://www.psag.cc/fdafasdf" target="_blank" id="short-url">http://www.psag.cc/fdafasdf</a>
+			<span id="short-url-comment">[NEW]</span>
+		</div>
 	</div>
-	<div id="go-box" class="box">
-		<button id="go" onclick="shorten(url.value)">Go</button>
+	<div id="button-box" class="box">
+		<button disabled onclick="shorten(url.value)">Go</button>
 	</div>
 </body>
 <script type="text/javascript">
-	const initialWidth = resizeToText(document.querySelector('#url').placeholder);
+	const url = document.querySelector('#url');
+	const initial = resizeToText(url.placeholder);
 	const form = document.querySelector('#form');
-	form.style['min-width'] = `${initialWidth}px`;
+	form.style['min-width'] = `${initial}px`;
+	updateCorrectnessHint(url.value);
 </script>
 
 </html>
