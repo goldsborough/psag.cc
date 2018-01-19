@@ -1,5 +1,25 @@
 'use strict';
 
+function copyShortUrl() {
+  debugger;
+  const shortUrl = document.querySelector('#short-url');
+
+  let temporary = document.createElement('input');
+  temporary.value = 'http://' + shortUrl.innerHTML;
+
+  document.body.appendChild(temporary);
+  temporary.focus();
+  temporary.select();
+  document.execCommand('copy');
+  document.body.removeChild(temporary);
+
+  console.info(`Copied ${temporary.value} to clipboard`);
+
+  const shortUrlComment = document.querySelector('#short-url-comment');
+  shortUrlComment.innerHTML = '[COPIED]';
+  shortUrlComment.style.display = '';
+}
+
 function resetInput() {
   const form = document.querySelector('#form');
   const url = document.querySelector('#url');
@@ -13,6 +33,8 @@ function resetInput() {
   button.className = '';
   button.innerHTML = 'Go';
   button.onclick = () => shorten(url.value);
+
+  resizeToText('');
 }
 
 function showShortUrl(response) {
@@ -22,7 +44,6 @@ function showShortUrl(response) {
   const shortUrl = document.querySelector('#short-url');
   const button = document.querySelector('button');
 
-  shortUrl.href = response.shortUrl;
   shortUrl.innerHTML = response.shortUrl;
 
   form.style.display = 'none';
@@ -33,11 +54,14 @@ function showShortUrl(response) {
   button.onclick = resetInput;
 
   const shortUrlComment = document.querySelector('#short-url-comment');
+  shortUrlComment.innerHTML = '[NEW]';
   shortUrlComment.style.display = response.alreadyExisted ? 'none' : '';
 }
 
 function shorten(url) {
+  url = encodeURIComponent(url);
 	console.info(`Sending request to shorten ${url}`);
+
 	const request = new XMLHttpRequest();
 	request.onreadystatechange = function() {
 		if (request.readyState === XMLHttpRequest.DONE) {
@@ -50,6 +74,7 @@ function shorten(url) {
 			}
 		}
 	};
+
 	request.open('POST', '/shorten');
 	request.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
   request.send(`url=${url}`);
@@ -69,6 +94,7 @@ function resizeToText(text) {
 	context.font = `${fontSize} ${fontFamily}`;
 	const width = context.measureText(text).width;
 	form.style.width = `${width}px`
+
 	return width;
 }
 

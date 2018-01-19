@@ -39,7 +39,6 @@ use diesel::prelude::*;
 use diesel::pg::PgConnection;
 use r2d2_diesel::ConnectionManager;
 
-use url::Url;
 use handlebars::Handlebars;
 use serde::ser::Serialize;
 
@@ -49,19 +48,19 @@ pub mod models;
 const DEFAULT_DB_URL: &'static str = "postgresql://goldsborough@localhost:5432";
 const NUMBER_OF_HASH_ATTEMPTS: usize = 100;
 
-const LONG_DOMAIN: &'static str = "http://www.goldsborough.me";
-const SHORT_DOMAIN: &'static str = "http://www.psag.cc";
+const LONG_DOMAIN: &'static str = "www.goldsborough.me";
+const SHORT_DOMAIN: &'static str = "www.psag.cc";
 
 const INDEX_PAGE: &'static str = "index.html";
 const SHORTEN_SUCCESS_PAGE: &'static str = "shorten-success.html";
 const SHORTEN_ERROR_PAGE: &'static str = "shorten-error.html";
-const EXPAND_ERROR_PAGE: &'static str = "expand-error.html";
+const RESOLVE_ERROR_PAGE: &'static str = "resolve-error.html";
 const NOT_FOUND_PAGE: &'static str = "404.html";
 const ALL_PAGES: &[&'static str] = &[
     INDEX_PAGE,
     SHORTEN_SUCCESS_PAGE,
     SHORTEN_ERROR_PAGE,
-    EXPAND_ERROR_PAGE,
+    RESOLVE_ERROR_PAGE,
     NOT_FOUND_PAGE,
 ];
 
@@ -104,7 +103,7 @@ struct ShortenResult {
     already_existed: bool,
 }
 
-struct ExpandResult {
+struct ResolveResult {
     short_url: String,
     long_url: String,
 }
@@ -184,51 +183,52 @@ fn shorten_url(
     }
 }
 
-fn expand_url(
-    short_url: String,
+fn resolve_url(
+    hash: &str,
     db_connection: &PgConnection,
-) -> FutureResult<ExpandResult, hyper::Error> {
+) -> FutureResult<ResolveResult, hyper::Error> {
     use schema::urls;
 
-    // Safe to unwrap here because we already validated the URL earlier.
-    let hash = String::from(Url::parse(&short_url[..]).unwrap().path());
+    debug!("Querying DB to resolve hash '{}'", hash);
     let query_result = urls::table
         .select(urls::long_url)
         .filter(urls::hash.eq(hash))
         .get_result(db_connection);
 
+    let short_url = format!("{}/{}", SHORT_DOMAIN, hash);
     match query_result {
-        Ok(long_url) => futures::future::ok(ExpandResult {
+        Ok(long_url) => futures::future::ok(ResolveResult {
             short_url: short_url,
             long_url: long_url,
         }),
-        Err(_) => futures::future::err(hyper::Error::from(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "Missing form field 'url'",
-        ))),
+        Err(_) => {
+            let error = format!("Could not resolve {}", short_url);
+            error!("{}", error);
+            futures::future::err(hyper::Error::from(
+                io::Error::new(io::ErrorKind::InvalidInput, error),
+            ))
+        }
     }
 }
 
-fn make_expand_response(
+fn make_resolve_response(
     page_manager: &PageManager,
-    result: Result<ExpandResult, hyper::Error>,
+    result: Result<ResolveResult, hyper::Error>,
 ) -> Result<hyper::Response, hyper::Error> {
-    match result {
-        Ok(expand_result) => {
-            Ok(make_redirect_response(
-                &expand_result.short_url[..],
-                &expand_result.long_url[..],
-            ))
+    let response = match result {
+        Ok(resolve_result) => {
+            make_redirect_response(&resolve_result.short_url[..], &resolve_result.long_url[..])
         }
         Err(error) => {
-            // vec![error.description()]
-            let page = page_manager.render(EXPAND_ERROR_PAGE, ());
-            let response = Response::new()
+            let mut values = HashMap::new();
+            values.insert("why", error.description());
+            let page = page_manager.render(RESOLVE_ERROR_PAGE, values);
+            Response::new()
                 .with_header(ContentLength(page.len() as u64))
-                .with_body(page);
-            Ok(response)
+                .with_body(page)
         }
-    }
+    };
+    Ok(response)
 }
 
 fn make_shorten_response(
@@ -264,13 +264,11 @@ fn make_redirect_response(source_url: &str, target_url: &str) -> hyper::Response
     info!("Redirecting {} to {}", source_url, target_url);
     Response::new()
         .with_status(StatusCode::PermanentRedirect)
-        .with_header(Location::new(String::from(target_url)))
+        .with_header(Location::new(target_url.to_string()))
 }
 
-fn is_valid_short_url(short_url: &String) -> bool {
-    Url::parse(short_url)
-        .map(|url| url.path().chars().all(char::is_alphanumeric))
-        .is_ok()
+fn is_valid_hash(hash: &str) -> bool {
+    hash.chars().all(char::is_alphanumeric)
 }
 
 struct UrlShortener {
@@ -309,11 +307,12 @@ impl Service for UrlShortener {
             }
             (Get, "/shorten") => {
                 let page = self.page_manager.get(INDEX_PAGE);
-                Box::new(futures::future::ok(
+                let future = futures::future::ok(
                     Response::new()
                         .with_header(ContentLength(page.len() as u64))
                         .with_body(page),
-                ))
+                );
+                Box::new(future)
             }
             (Post, "/shorten") => {
                 let db_pool = self.db_pool.clone();
@@ -329,13 +328,12 @@ impl Service for UrlShortener {
                 });
                 Box::new(future)
             }
-            (Get, _) if is_valid_short_url(&path) => {
+            (Get, _) if is_valid_hash(&path[1..]) => {
                 let db_pool = self.db_pool.clone();
                 let page_manager = self.page_manager.clone();
                 let future = self.thread_pool.spawn_fn(move || {
-                    expand_url(path, db_pool.get().unwrap().deref()).then(
-                        move |result| make_expand_response(&page_manager, result),
-                    )
+                    resolve_url(&path[1..], db_pool.get().unwrap().deref())
+                        .then(move |result| make_resolve_response(&page_manager, result))
                 });
                 Box::new(future)
             }
@@ -344,11 +342,12 @@ impl Service for UrlShortener {
                 // ENABLE WITH FLAG
                 info!("Requesting resource {}", path);
                 let resource = read_resource_from_disk(&path[1..]);
-                Box::new(futures::future::ok(
+                let future = futures::future::ok(
                     Response::new()
                         .with_header(ContentLength(resource.len() as u64))
                         .with_body(resource),
-                ))
+                );
+                Box::new(future)
             }
             (method, _) => {
                 info!("{} request for unknown resource {}", method, path);

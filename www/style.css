@@ -73,12 +73,13 @@ button.back {
 	line-height: 36px;
 }
 
-.not-found h1 {
+h1 {
+  color: red;
 	font-size: 72px;
 	margin: 0;
 }
 
-.not-found h2 {
+h2 {
 	font-size: 16px;
 	margin: 0;
 }
@@ -90,7 +91,7 @@ button.back {
 #short-url {
   border-bottom: 1px dotted blue;
   color: black;
-  text-decoration: none;
+  cursor: pointer;
 }
 
 #short-url-comment {
