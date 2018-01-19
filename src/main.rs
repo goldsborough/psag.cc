@@ -4,6 +4,7 @@ extern crate futures;
 extern crate handlebars;
 extern crate hyper;
 extern crate postgres;
+extern crate num_cpus;
 extern crate rand;
 extern crate r2d2_diesel;
 extern crate r2d2;

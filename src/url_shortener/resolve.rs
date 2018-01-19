@@ -49,7 +49,7 @@ pub fn make_response(
         Err(error) => {
             let mut values = HashMap::new();
             values.insert("why", error.description());
-            let page = resource_manager.render_page("resolve-error.html", values);
+            let page = resource_manager.render_page("resolve-error", values);
             Response::new()
                 .with_header(ContentLength(page.len() as u64))
                 .with_body(page)

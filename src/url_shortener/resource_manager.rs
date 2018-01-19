@@ -12,7 +12,8 @@ impl ResourceManager {
     pub fn new(page_names: &[&'static str]) -> ResourceManager {
         let mut pages = Handlebars::new();
         for page_name in page_names {
-            let page = ResourceManager::read_resource_from_disk(&format!("www/{}", page_name));
+            let path = format!("www/{}.html", page_name);
+            let page = ResourceManager::read_resource_from_disk(&path);
             pages.register_template_string(page_name, page).unwrap();
         }
         ResourceManager { pages }
