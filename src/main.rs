@@ -114,8 +114,10 @@ fn parse_url_from_form(form_chunk: Chunk) -> FutureResult<String, hyper::Error> 
         .into_owned()
         .collect::<HashMap<String, String>>();
     if let Some(long_url) = form.get("url") {
+        info!("Found URL in form: {}", long_url);
         futures::future::ok(long_url.clone())
     } else {
+        error!("Received POST request at /shorten but with no URL");
         futures::future::err(hyper::Error::from(io::Error::new(
             io::ErrorKind::InvalidInput,
             "Missing form field 'url'",

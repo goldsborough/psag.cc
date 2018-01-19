@@ -10,7 +10,7 @@ body {
 .box {
 	display: flex;
 	justify-content: center;
-	margin: 8px;
+	margin: 14px;
   height: 32px;
 }
 
