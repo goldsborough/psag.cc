@@ -125,8 +125,12 @@ fn parse_url_from_form(form_chunk: Chunk) -> FutureResult<String, hyper::Error> 
     debug!("Received request with form data: {:?}", form);
 
     let error = match form.remove("url") {
-        Some(long_url) => {
+        Some(mut long_url) => {
             debug!("Found URL in form: {}", long_url);
+            if !long_url.starts_with("http") {
+                long_url = format!("http://{}", long_url);
+                debug!("Prepending http:// -> {}", long_url);
+            }
             match url::Url::parse(&long_url) {
                 Ok(valid_url) => {
                     let domain = valid_url.host_str().unwrap();

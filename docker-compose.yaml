@@ -11,7 +11,7 @@ services:
     environment:
       DATABASE_URL: postgresql://postgres:psag.cc@db:5432
       RUST_BACKTRACE: 1
-      RUST_LOG: url_shortener=debug
+      RUST_LOG: psag_cc=debug
   db:
     build:
       context: .

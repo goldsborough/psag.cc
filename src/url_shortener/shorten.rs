@@ -121,7 +121,7 @@ pub fn make_response(
             (StatusCode::InternalServerError, payload)
         }
     };
-    info!("Returning response ({}) with payload {}", status, payload);
+    debug!("Returning response ({}) with payload {}", status, payload);
     let response = Response::new()
         .with_status(status)
         .with_header(ContentLength(payload.len() as u64))
