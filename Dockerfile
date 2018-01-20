@@ -1,6 +1,6 @@
 FROM rust
 
-WORKDIR /usr/src/url-shortener
+WORKDIR /var/www/psag.cc/
 COPY . .
 
 RUN cargo install
