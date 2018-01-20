@@ -22,44 +22,58 @@ pub struct ShortenResult {
     already_existed: bool,
 }
 
-pub fn get_hash(
-    long_url: String,
+fn query_db_for_hash(
+    long_url: &String,
     db_connection: &PgConnection,
-) -> FutureResult<ShortenResult, hyper::Error> {
+) -> Result<Option<String>, io::Error> {
     use db::schema::urls;
-
     debug!("Querying DB to see if long URL already exists");
     let existing_url: QueryResult<db::models::Url> = urls::table
         .filter(urls::long_url.eq(long_url.clone()))
         .get_result(db_connection);
-    let maybe_hash = match existing_url {
-        Ok(url) => Some(url.hash),
-        Err(diesel::result::Error::NotFound) => None,
-        Err(error) => {
-            return futures::future::err(hyper::Error::from(
-                io::Error::new(io::ErrorKind::Other, error.description()),
-            ));
+    match existing_url {
+        Ok(url) => Ok(Some(url.hash)),
+        Err(diesel::result::Error::NotFound) => Ok(None),
+        Err(error) => Err(io::Error::new(io::ErrorKind::Other, error.description())),
+    }
+}
+
+fn generate_and_insert_hash_into_db(
+    long_url: &String,
+    db_connection: &PgConnection,
+) -> Option<String> {
+    use db::schema::urls;
+    for attempt in 1..NUMBER_OF_HASH_ATTEMPTS + 1 {
+        debug!("Inserting URL {} into DB", long_url);
+        let result = diesel::insert_into(urls::table)
+            .values(&db::models::NewUrl::new(&long_url))
+            .returning(urls::hash)
+            .get_result(db_connection);
+        match result {
+            Ok(hash) => return Some(hash),
+            Err(_) => {
+                warn!("Attempt #{} to find hash for {} failed", attempt, long_url);
+            }
         }
+
+    }
+    None
+}
+
+pub fn get_hash(
+    long_url: String,
+    db_connection: &PgConnection,
+) -> FutureResult<ShortenResult, hyper::Error> {
+    let maybe_hash = match query_db_for_hash(&long_url, db_connection) {
+        Ok(maybe_hash) => maybe_hash,
+        Err(error) => return futures::future::err(hyper::Error::from(error)),
     };
 
     let already_existed = maybe_hash.is_some();
     debug!("URL {} was already present: {}", long_url, already_existed);
-    let maybe_hash = maybe_hash.or_else(|| {
-        for attempt in 1..NUMBER_OF_HASH_ATTEMPTS + 1 {
-            debug!("Inserting URL {} into DB", long_url);
-            let result = diesel::insert_into(urls::table)
-                .values(&db::models::NewUrl::new(&long_url))
-                .returning(urls::hash)
-                .get_result(db_connection);
-            match result {
-                Ok(hash) => return Some(hash),
-                Err(_) => {
-                    warn!("Attempt #{} to find hash for {} failed", attempt, long_url);
-                }
-            }
 
-        }
-        None
+    let maybe_hash = maybe_hash.or_else(|| {
+        generate_and_insert_hash_into_db(&long_url, db_connection)
     });
 
     match maybe_hash {
@@ -87,10 +101,7 @@ pub fn make_response(
         Ok(result) => {
             let short_url = format!("{}/{}", short_domain, result.hash);
             let payload = format!(
-                r#"{{
-                    "shortUrl": "{}",
-                    "alreadyExisted": {}
-                }}"#,
+                r#"{{"shortUrl": "{}", "alreadyExisted": {}}}"#,
                 short_url,
                 result.already_existed
             );
@@ -106,6 +117,6 @@ pub fn make_response(
         .with_header(ContentLength(payload.len() as u64))
         .with_header(ContentType::json())
         .with_body(payload);
-    debug!("{:?}", response);
+    info!("{:?}", response);
     futures::future::ok(response)
 }
