@@ -5,4 +5,4 @@ COPY . .
 
 RUN cargo install
 
-CMD ["url-shortener"]
+CMD ["psag_cc"]
