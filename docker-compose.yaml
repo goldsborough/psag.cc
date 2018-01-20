@@ -3,7 +3,7 @@ services:
   server:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: docker/Dockerfile
     networks:
       - network
     ports:
@@ -15,7 +15,7 @@ services:
   db:
     build:
       context: .
-      dockerfile: Dockerfile-db
+      dockerfile: docker/Dockerfile-db
     restart: always
     networks:
       - network
