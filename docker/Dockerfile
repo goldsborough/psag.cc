@@ -1,4 +1,5 @@
 FROM rust
+MAINTAINER <peter@goldsborough.me>
 
 # Install vim for in-place editing.
 RUN apt-get update -y && apt-get install -y vim
