@@ -26,13 +26,13 @@ mod db;
 
 fn main() {
     pretty_env_logger::init().unwrap();
-    let address = env::var("URL_SHORTENER_ADDRESS")
+    let address = env::var("HOST_PORT")
         .unwrap_or(String::from("0.0.0.0:80"))
         .parse()
         .unwrap();
     let server = hyper::server::Http::new()
         .bind(&address, || Ok(service::UrlShortener::new()))
         .unwrap();
-    info!("Starting url-shortener service @ http://{}", address);
+    info!("Starting psag.cc service @ http://{}", address);
     server.run().unwrap();
 }
