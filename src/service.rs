@@ -36,6 +36,7 @@ const DEFAULT_DB_URL: &'static str = "postgresql://postgres@localhost:5432";
 const LONG_DOMAIN: &'static str = "www.goldsborough.me";
 const SHORT_DOMAIN: &'static str = "www.psag.cc";
 const PAGES: &[&'static str] = &["index", "resolve-error", "404"];
+const PARTIALS: &[&'static str] = &["head"];
 
 pub struct UrlShortener {
     thread_pool: CpuPool,
@@ -51,7 +52,7 @@ impl UrlShortener {
         info!("Creating threadpool with {} threads", num_cpus::get());
         UrlShortener {
             thread_pool: CpuPool::new(num_cpus::get()),
-            resource_manager: Arc::new(ResourceManager::new(PAGES)),
+            resource_manager: Arc::new(ResourceManager::new(PAGES, PARTIALS)),
             db_pool: r2d2::Pool::builder().build(db_manager).unwrap(),
         }
     }

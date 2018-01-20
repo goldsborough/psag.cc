@@ -9,8 +9,13 @@ pub struct ResourceManager {
 }
 
 impl ResourceManager {
-    pub fn new(page_names: &[&'static str]) -> ResourceManager {
+    pub fn new(page_names: &[&'static str], partials: &[&'static str]) -> ResourceManager {
         let mut pages = Handlebars::new();
+        for partial_name in partials {
+            let path = format!("www/{}.partial.html", partial_name);
+            let page = ResourceManager::read_resource_from_disk(&path);
+            pages.register_partial(partial_name, page).unwrap();
+        }
         for page_name in page_names {
             let path = format!("www/{}.html", page_name);
             let page = ResourceManager::read_resource_from_disk(&path);
