@@ -52,7 +52,7 @@ fn generate_and_insert_hash_into_db(
         match result {
             Ok(hash) => return Some(hash),
             Err(_) => {
-                warn!("Attempt #{} to find hash for {} failed", attempt, long_url);
+                debug!("Attempt #{} to find hash for {} failed", attempt, long_url);
             }
         }
 
@@ -70,7 +70,11 @@ pub fn get_hash(
     };
 
     let already_existed = maybe_hash.is_some();
-    debug!("URL {} was already present: {}", long_url, already_existed);
+    if already_existed {
+        info!("URL {} was already present in DB", long_url);
+    } else {
+        info!("Creating new DB entry for {}", long_url);
+    }
 
     let maybe_hash = maybe_hash.or_else(|| {
         generate_and_insert_hash_into_db(&long_url, db_connection)
@@ -108,15 +112,16 @@ pub fn make_response(
             (StatusCode::Ok, payload)
         }
         Err(error) => {
+            error!("{}", error.description());
             let payload = format!(r#"{{"error": "{}"}}"#, error.description());
             (StatusCode::InternalServerError, payload)
         }
     };
+    info!("Returning response ({}) with payload {}", status, payload);
     let response = Response::new()
         .with_status(status)
         .with_header(ContentLength(payload.len() as u64))
         .with_header(ContentType::json())
         .with_body(payload);
-    info!("{:?}", response);
     futures::future::ok(response)
 }

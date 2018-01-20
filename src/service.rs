@@ -32,7 +32,7 @@ use url_shortener::ResourceManager;
 use url_shortener::shorten;
 use url_shortener::resolve;
 
-const DEFAULT_DB_URL: &'static str = "postgresql://goldsborough@localhost:5432";
+const DEFAULT_DB_URL: &'static str = "postgresql://postgres@localhost:5432";
 const LONG_DOMAIN: &'static str = "www.goldsborough.me";
 const SHORT_DOMAIN: &'static str = "www.psag.cc";
 const PAGES: &[&'static str] = &["index", "resolve-error", "404"];
@@ -88,6 +88,7 @@ impl Service for UrlShortener {
                         .concat2()
                         .and_then(parse_url_from_form)
                         .and_then(move |long_url| {
+                            info!("Request to shorten {}", long_url);
                             shorten::get_hash(long_url, db_pool.get().unwrap().deref())
                         })
                         .then(|result| shorten::make_response(SHORT_DOMAIN, result))
@@ -96,6 +97,7 @@ impl Service for UrlShortener {
             }
             // resolution requests
             (Get, _) if is_valid_hash(&path[1..]) => {
+                info!("Request to resolve {}{}", SHORT_DOMAIN, path);
                 let db_pool = self.db_pool.clone();
                 let resource_manager = self.resource_manager.clone();
                 let future = self.thread_pool.spawn_fn(move || {
