@@ -16,7 +16,7 @@ use hyper;
 use hyper::{Chunk, StatusCode};
 use hyper::server::{Request, Response, Service};
 use hyper::Method::{Get, Post};
-use hyper::header::{ContentLength, Location};
+use hyper::header::ContentLength;
 
 // db
 use r2d2;
@@ -68,15 +68,8 @@ impl Service for UrlShortener {
         let method = request.method().clone();
         let path = String::from(request.path());
         match (method, &path[..]) {
-            // permanent redirect to long domain
-            (Get, "/") => {
-                let response = Response::new()
-                    .with_status(StatusCode::PermanentRedirect)
-                    .with_header(Location::new(LONG_DOMAIN));
-                Box::new(futures::future::ok(response))
-            }
             // main interface
-            (Get, "/shorten") => {
+            (Get, "/") => {
                 let template = self.resource_manager.get_template("index");
                 Box::new(make_response(StatusCode::Ok, template))
             }
@@ -109,11 +102,9 @@ impl Service for UrlShortener {
                 });
                 Box::new(future)
             }
-            // static resources
-            (Get, _) if path.starts_with("/www/") => {
-                // Serving static content should be done by NGINX or smth.
-                // ENABLE WITH FLAG
-                info!("Requesting resource {}", path);
+            // static resources (for development)
+            (Get, _) if path.starts_with("/static/www/") => {
+                warn!("Requesting static resource {}", path);
                 let resource = ResourceManager::read_resource_from_disk(&path[1..]);
                 Box::new(make_response(StatusCode::Ok, resource))
             }
@@ -132,16 +123,27 @@ fn parse_url_from_form(form_chunk: Chunk) -> FutureResult<String, hyper::Error> 
         .into_owned()
         .collect::<HashMap<String, String>>();
     debug!("Received request with form data: {:?}", form);
-    if let Some(long_url) = form.remove("url") {
-        debug!("Found URL in form: {}", long_url);
-        futures::future::ok(long_url)
-    } else {
-        error!("Received POST request at /shorten but with no URL");
-        futures::future::err(hyper::Error::from(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "Missing form field 'url'",
-        )))
-    }
+
+    let error = match form.remove("url") {
+        Some(long_url) => {
+            debug!("Found URL in form: {}", long_url);
+            match url::Url::parse(&long_url) {
+                Ok(valid_url) => {
+                    let domain = valid_url.host_str().unwrap();
+                    if domain == LONG_DOMAIN {
+                        return futures::future::ok(long_url);
+                    }
+                    format!("Invalid domain '{}', expected {}", domain, LONG_DOMAIN)
+                }
+                Err(error) => format!("Invalid URL {}: {}", long_url, error),
+            }
+        }
+        None => String::from("Missing form field 'url' for request to /shorten"),
+    };
+
+    futures::future::err(hyper::Error::from(
+        io::Error::new(io::ErrorKind::InvalidInput, error),
+    ))
 }
 
 fn is_valid_hash(hash: &str) -> bool {

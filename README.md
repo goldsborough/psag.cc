@@ -1,8 +1,3 @@
-# url-shortener
+# psag.cc
 
-TODO:
-- Update the last access time and access count!!
-- Get Google Cloud free tier
-- Docker container for the app
-- Docker container for postgres
-- Put NGINX in front
+This repository contains the source code for [psag.cc](http;//psag.cc), a URL shortening web application for my blog, [goldsborough.me](http://goldsborough.me). The major highlight is that it is written in Rust.
