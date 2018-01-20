@@ -64,10 +64,10 @@ pub fn make_response(
         Err(error) => {
             let mut values = HashMap::new();
             values.insert("why", error.description());
-            let page = resource_manager.render_page("resolve-error", values);
+            let template = resource_manager.render_template("resolve-error", values);
             Response::new()
-                .with_header(ContentLength(page.len() as u64))
-                .with_body(page)
+                .with_header(ContentLength(template.len() as u64))
+                .with_body(template)
         }
     };
     Ok(response)

@@ -1,35 +1,41 @@
+use std::env;
 use std::fs::File;
 use std::io::prelude::*;
 
 use handlebars::Handlebars;
 use serde::ser::Serialize;
 
+const DEFAULT_WWW_DIR: &'static str = "/var/www/psag.cc/static/www";
+
 pub struct ResourceManager {
-    pages: Handlebars,
+    templates: Handlebars,
 }
 
 impl ResourceManager {
-    pub fn new(page_names: &[&'static str], partials: &[&'static str]) -> ResourceManager {
-        let mut pages = Handlebars::new();
+    pub fn new(template_names: &[&'static str], partials: &[&'static str]) -> ResourceManager {
+        let mut templates = Handlebars::new();
+        let www = env::var("WWW_DIR").unwrap_or(String::from(DEFAULT_WWW_DIR));
         for partial_name in partials {
-            let path = format!("www/{}.partial.html", partial_name);
-            let page = ResourceManager::read_resource_from_disk(&path);
-            pages.register_partial(partial_name, page).unwrap();
+            let path = format!("{}/{}.partial.html", www, partial_name);
+            let template = ResourceManager::read_resource_from_disk(&path);
+            templates.register_partial(partial_name, template).unwrap();
         }
-        for page_name in page_names {
-            let path = format!("www/{}.html", page_name);
-            let page = ResourceManager::read_resource_from_disk(&path);
-            pages.register_template_string(page_name, page).unwrap();
+        for template_name in template_names {
+            let path = format!("{}/{}.html", www, template_name);
+            let template = ResourceManager::read_resource_from_disk(&path);
+            templates
+                .register_template_string(template_name, template)
+                .unwrap();
         }
-        ResourceManager { pages }
+        ResourceManager { templates }
     }
 
-    pub fn get_page(&self, name: &'static str) -> String {
-        self.render_page(name, ())
+    pub fn get_template(&self, name: &'static str) -> String {
+        self.render_template(name, ())
     }
 
-    pub fn render_page<T: Serialize>(&self, name: &str, values: T) -> String {
-        self.pages.render(name, &values).unwrap()
+    pub fn render_template<T: Serialize>(&self, name: &str, values: T) -> String {
+        self.templates.render(name, &values).unwrap()
     }
 
     pub fn read_resource_from_disk(path: &str) -> String {

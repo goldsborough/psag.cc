@@ -77,8 +77,8 @@ impl Service for UrlShortener {
             }
             // main interface
             (Get, "/shorten") => {
-                let page = self.resource_manager.get_page("index");
-                Box::new(make_response(StatusCode::Ok, page))
+                let template = self.resource_manager.get_template("index");
+                Box::new(make_response(StatusCode::Ok, template))
             }
             // shorten requests
             (Post, "/shorten") => {
@@ -120,8 +120,8 @@ impl Service for UrlShortener {
             // 404
             (method, _) => {
                 info!("{} request for unknown resource {}", method, path);
-                let page = self.resource_manager.get_page("404");
-                Box::new(make_response(StatusCode::NotFound, page))
+                let template = self.resource_manager.get_template("404");
+                Box::new(make_response(StatusCode::NotFound, template))
             }
         }
     }
