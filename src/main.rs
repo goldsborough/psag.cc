@@ -1,3 +1,4 @@
+extern crate ansi_term;
 extern crate chrono;
 extern crate futures_cpupool;
 extern crate futures;
@@ -5,6 +6,7 @@ extern crate handlebars;
 extern crate hyper;
 extern crate num_cpus;
 extern crate postgres;
+extern crate env_logger;
 extern crate pretty_env_logger;
 extern crate r2d2_diesel;
 extern crate r2d2;
@@ -20,12 +22,13 @@ extern crate diesel;
 
 use std::env;
 
+mod db;
+mod logging;
 mod service;
 mod url_shortener;
-mod db;
 
 fn main() {
-    pretty_env_logger::init().unwrap();
+    logging::init();
     let address = env::var("HOST_PORT")
         .unwrap_or(String::from("0.0.0.0:80"))
         .parse()
