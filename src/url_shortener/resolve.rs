@@ -10,10 +10,22 @@ use hyper::StatusCode;
 use hyper::server::Response;
 use hyper::header::{ContentLength, Location};
 
+use diesel;
 use diesel::prelude::*;
 use diesel::pg::PgConnection;
 
 use url_shortener::resource_manager::ResourceManager;
+
+fn increment_access_count(hash: &str, db_connection: &PgConnection) {
+    use db::schema::urls;
+    let access_count: i32 = diesel::update(urls::table)
+        .filter(urls::hash.eq(hash))
+        .set(urls::access_count.eq(urls::access_count + 1))
+        .returning(urls::access_count)
+        .get_result(db_connection)
+        .unwrap();
+    debug!("Incremented access count of {} to {}", hash, access_count);
+}
 
 pub fn resolve_url(hash: &str, db_connection: &PgConnection) -> FutureResult<String, hyper::Error> {
     use db::schema::urls;
@@ -25,7 +37,10 @@ pub fn resolve_url(hash: &str, db_connection: &PgConnection) -> FutureResult<Str
         .get_result(db_connection);
 
     match query_result {
-        Ok(long_url) => futures::future::ok(long_url),
+        Ok(long_url) => {
+            increment_access_count(hash, db_connection);
+            futures::future::ok(long_url)
+        }
         Err(_) => {
             let error = format!("Could not resolve {}", hash);
             error!("{}", error);
