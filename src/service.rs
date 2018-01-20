@@ -1,9 +1,9 @@
 // std
-use std::io;
 use std::collections::HashMap;
-use std::sync::Arc;
 use std::env;
+use std::io;
 use std::ops::Deref;
+use std::sync::Arc;
 
 // futures
 use futures;
@@ -58,7 +58,9 @@ impl UrlShortener {
     }
 }
 
-impl Service for UrlShortener {
+pub struct UrlShortenerService<'a>(pub &'a UrlShortener);
+
+impl<'a> Service for UrlShortenerService<'a> {
     type Request = Request;
     type Response = Response;
     type Error = hyper::Error;
@@ -70,13 +72,13 @@ impl Service for UrlShortener {
         match (method, &path[..]) {
             // main interface
             (Get, "/") => {
-                let template = self.resource_manager.get_template("index");
+                let template = self.0.resource_manager.get_template("index");
                 Box::new(make_response(StatusCode::Ok, template))
             }
             // shorten requests
             (Post, "/shorten") => {
-                let db_pool = self.db_pool.clone();
-                let future = self.thread_pool.spawn_fn(move || {
+                let db_pool = self.0.db_pool.clone();
+                let future = self.0.thread_pool.spawn_fn(move || {
                     request
                         .body()
                         .concat2()
@@ -92,9 +94,9 @@ impl Service for UrlShortener {
             // resolution requests
             (Get, _) if is_valid_hash(&path[1..]) => {
                 info!("Request to resolve {}{}", SHORT_DOMAIN, path);
-                let db_pool = self.db_pool.clone();
-                let resource_manager = self.resource_manager.clone();
-                let future = self.thread_pool.spawn_fn(move || {
+                let db_pool = self.0.db_pool.clone();
+                let resource_manager = self.0.resource_manager.clone();
+                let future = self.0.thread_pool.spawn_fn(move || {
                     resolve::resolve_url(&path[1..], db_pool.get().unwrap().deref())
                         .then(move |long_url| {
                             resolve::make_response(&resource_manager, long_url)
@@ -111,7 +113,7 @@ impl Service for UrlShortener {
             // 404
             (method, _) => {
                 info!("{} request for unknown resource {}", method, path);
-                let template = self.resource_manager.get_template("404");
+                let template = self.0.resource_manager.get_template("404");
                 Box::new(make_response(StatusCode::NotFound, template))
             }
         }

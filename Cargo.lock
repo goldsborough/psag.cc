@@ -8,11 +8,6 @@ dependencies = [
 
 [[package]]
 name = "ansi_term"
-version = "0.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-
-[[package]]
-name = "ansi_term"
 version = "0.10.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
@@ -142,15 +137,6 @@ dependencies = [
 name = "dtoa"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-
-[[package]]
-name = "env_logger"
-version = "0.4.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-dependencies = [
- "log 0.3.9 (registry+https://github.com/rust-lang/crates.io-index)",
- "regex 0.2.5 (registry+https://github.com/rust-lang/crates.io-index)",
-]
 
 [[package]]
 name = "env_logger"
@@ -538,16 +524,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "pretty_env_logger"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-dependencies = [
- "ansi_term 0.9.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "env_logger 0.4.3 (registry+https://github.com/rust-lang/crates.io-index)",
- "log 0.3.9 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
-[[package]]
 name = "psag_cc"
 version = "0.1.0"
 dependencies = [
@@ -562,7 +538,6 @@ dependencies = [
  "log 0.4.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "num_cpus 1.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "postgres 0.15.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "pretty_env_logger 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "r2d2 0.8.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "r2d2-diesel 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand 0.4.2 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -960,7 +935,6 @@ dependencies = [
 [metadata]
 "checksum aho-corasick 0.6.4 (registry+https://github.com/rust-lang/crates.io-index)" = "d6531d44de723825aa81398a6415283229725a00fa30713812ab9323faa82fc4"
 "checksum ansi_term 0.10.2 (registry+https://github.com/rust-lang/crates.io-index)" = "6b3568b48b7cefa6b8ce125f9bb4989e52fbcc29ebea88df04cc7c5f12f70455"
-"checksum ansi_term 0.9.0 (registry+https://github.com/rust-lang/crates.io-index)" = "23ac7c30002a5accbf7e8987d0632fa6de155b7c3d39d0067317a391e00a2ef6"
 "checksum antidote 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)" = "34fde25430d87a9388dadbe6e34d7f72a462c8b43ac8d309b42b0a8505d7e2a5"
 "checksum atty 0.2.6 (registry+https://github.com/rust-lang/crates.io-index)" = "8352656fd42c30a0c3c89d26dea01e3b77c0ab2af18230835c15e2e13cd51859"
 "checksum base64 0.6.0 (registry+https://github.com/rust-lang/crates.io-index)" = "96434f987501f0ed4eb336a411e0631ecd1afa11574fe148587adc4ff96143c9"
@@ -978,7 +952,6 @@ dependencies = [
 "checksum diesel_derives 1.1.0 (registry+https://github.com/rust-lang/crates.io-index)" = "28e2b2605ac6a3b9a586383f5f8b2b5f1108f07a421ade965b266289d2805e79"
 "checksum digest 0.6.2 (registry+https://github.com/rust-lang/crates.io-index)" = "e5b29bf156f3f4b3c4f610a25ff69370616ae6e0657d416de22645483e72af0a"
 "checksum dtoa 0.4.2 (registry+https://github.com/rust-lang/crates.io-index)" = "09c3753c3db574d215cba4ea76018483895d7bff25a31b49ba45db21c48e50ab"
-"checksum env_logger 0.4.3 (registry+https://github.com/rust-lang/crates.io-index)" = "3ddf21e73e016298f5cb37d6ef8e8da8e39f91f9ec8b0df44b7deb16a9f8cd5b"
 "checksum env_logger 0.5.2 (registry+https://github.com/rust-lang/crates.io-index)" = "f98112cf5e30982be3514040871a6f310504a7406ce1936691649353ec0607e9"
 "checksum fake-simd 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)" = "e88a8acf291dafb59c2d96e8f59828f3838bb1a70398823ade51a84de6a6deed"
 "checksum fallible-iterator 0.1.4 (registry+https://github.com/rust-lang/crates.io-index)" = "d6034a9c9dfce417c7710128d202eef406878cd2fe294e76e2ee05259c9b042d"
@@ -1025,7 +998,6 @@ dependencies = [
 "checksum postgres-protocol 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)" = "2b5cf13fd1f61ca10b374a44b7feb0636fce67cd3bd42f925f9186b0e7ccec7b"
 "checksum postgres-shared 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)" = "22fcb88c55471615fea5217b41ab59df5a00665edb4e92f67c35119b7e8948ed"
 "checksum pq-sys 0.4.4 (registry+https://github.com/rust-lang/crates.io-index)" = "4dfb5e575ef93a1b7b2a381d47ba7c5d4e4f73bff37cee932195de769aad9a54"
-"checksum pretty_env_logger 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)" = "8a97d1fde8be5bdb2c315277042a39a89b8ca5640c9d8e1a900cc9d906ee5af2"
 "checksum quick-error 1.2.1 (registry+https://github.com/rust-lang/crates.io-index)" = "eda5fe9b71976e62bc81b781206aaa076401769b2143379d3eb2118388babac4"
 "checksum quote 0.3.15 (registry+https://github.com/rust-lang/crates.io-index)" = "7a6e920b65c65f10b2ae65c831a81a073a89edd28c7cce89475bff467ab4167a"
 "checksum r2d2 0.8.2 (registry+https://github.com/rust-lang/crates.io-index)" = "f9078ca6a8a5568ed142083bb2f7dc9295b69d16f867ddcc9849e51b17d8db46"
