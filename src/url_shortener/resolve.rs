@@ -24,13 +24,13 @@ fn increment_access_count(hash: &str, db_connection: &PgConnection) {
         .returning(urls::access_count)
         .get_result(db_connection)
         .unwrap();
-    debug!("Incremented access count of {} to {}", hash, access_count);
+    debug!("Incremented access count of '{}' to {}", hash, access_count);
 }
 
 pub fn resolve_url(hash: &str, db_connection: &PgConnection) -> FutureResult<String, hyper::Error> {
     use db::schema::urls;
 
-    debug!("Querying DB to resolve hash '{}'", hash);
+    debug!("Querying DB to resolve '{}'", hash);
     let query_result = urls::table
         .select(urls::long_url)
         .filter(urls::hash.eq(hash))
@@ -38,11 +38,12 @@ pub fn resolve_url(hash: &str, db_connection: &PgConnection) -> FutureResult<Str
 
     match query_result {
         Ok(long_url) => {
+            info!("Resolved '{}' to '{}'", hash, long_url);
             increment_access_count(hash, db_connection);
             futures::future::ok(long_url)
         }
         Err(_) => {
-            let error = format!("Could not resolve {}", hash);
+            let error = format!("Could not resolve '{}'", hash);
             error!("{}", error);
             futures::future::err(hyper::Error::from(
                 io::Error::new(io::ErrorKind::InvalidInput, error),

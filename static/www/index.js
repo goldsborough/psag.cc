@@ -1,7 +1,6 @@
 'use strict';
 
 function copyShortUrl() {
-  debugger;
   const shortUrl = document.querySelector('#short-url');
 
   let temporary = document.createElement('input');

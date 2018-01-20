@@ -33,8 +33,8 @@ use url_shortener::shorten;
 use url_shortener::resolve;
 
 const DEFAULT_DB_URL: &'static str = "postgresql://postgres@localhost:5432";
-const LONG_DOMAIN: &'static str = "www.goldsborough.me";
-const SHORT_DOMAIN: &'static str = "www.psag.cc";
+const LONG_DOMAIN: &'static str = "goldsborough.me";
+const SHORT_DOMAIN: &'static str = "psag.cc";
 const PAGES: &[&'static str] = &["index", "resolve-error", "404"];
 const PARTIALS: &[&'static str] = &["head"];
 
@@ -130,7 +130,7 @@ fn parse_url_from_form(form_chunk: Chunk) -> FutureResult<String, hyper::Error> 
             match url::Url::parse(&long_url) {
                 Ok(valid_url) => {
                     let domain = valid_url.host_str().unwrap();
-                    if domain == LONG_DOMAIN {
+                    if domain == LONG_DOMAIN || domain == format!("www.{}", LONG_DOMAIN) {
                         return futures::future::ok(long_url);
                     }
                     format!("Invalid domain '{}', expected {}", domain, LONG_DOMAIN)

@@ -1,5 +1,8 @@
 FROM rust
 
+# Install vim for in-place editing.
+RUN apt-get update -y && apt-get install -y vim
+
 WORKDIR /var/www/psag.cc/
 COPY . .
 

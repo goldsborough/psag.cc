@@ -44,7 +44,7 @@ fn generate_and_insert_hash_into_db(
 ) -> Option<String> {
     use db::schema::urls;
     for attempt in 1..NUMBER_OF_HASH_ATTEMPTS + 1 {
-        debug!("Inserting URL {} into DB", long_url);
+        debug!("Inserting URL '{}' into DB", long_url);
         let result = diesel::insert_into(urls::table)
             .values(&db::models::NewUrl::new(&long_url))
             .returning(urls::hash)
@@ -52,7 +52,11 @@ fn generate_and_insert_hash_into_db(
         match result {
             Ok(hash) => return Some(hash),
             Err(_) => {
-                debug!("Attempt #{} to find hash for {} failed", attempt, long_url);
+                debug!(
+                    "Attempt #{} to find hash for '{}' failed",
+                    attempt,
+                    long_url
+                );
             }
         }
 
@@ -71,9 +75,9 @@ pub fn get_hash(
 
     let already_existed = maybe_hash.is_some();
     if already_existed {
-        info!("URL {} was already present in DB", long_url);
+        info!("URL '{}' was already present in DB", long_url);
     } else {
-        info!("Creating new DB entry for {}", long_url);
+        info!("Creating new DB entry for '{}'", long_url);
     }
 
     let maybe_hash = maybe_hash.or_else(|| {
@@ -82,7 +86,7 @@ pub fn get_hash(
 
     match maybe_hash {
         Some(hash) => {
-            info!("Hash for {} is {}", long_url, hash);
+            info!("Hash for '{}' is '{}'", long_url, hash);
             futures::future::ok(ShortenResult {
                 hash,
                 already_existed,
@@ -91,7 +95,7 @@ pub fn get_hash(
         None => {
             futures::future::err(hyper::Error::from(io::Error::new(
                 io::ErrorKind::Other,
-                "Could not find hash for URL",
+                format!("Could not find hash for '{}'", long_url),
             )))
         }
     }
