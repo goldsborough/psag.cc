@@ -1,0 +1,26 @@
+version: '3'
+services:
+  url-shortener:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    networks:
+      - network
+    ports:
+       - "8080:80"
+    environment:
+      DATABASE_URL: postgresql://postgres:url-shortener@db:5432
+      RUST_BACKTRACE: 1
+      RUST_LOG: debug
+  db:
+    build:
+      context: .
+      dockerfile: Dockerfile-db
+    restart: always
+    networks:
+      - network
+    environment:
+      POSTGRES_PASSWORD: url-shortener
+
+networks:
+  network:

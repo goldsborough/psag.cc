@@ -1,0 +1,2 @@
+FROM postgres
+ADD schemas/urls.sql /docker-entrypoint-initdb.d/
